@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import os
 import logging
 
-from config.settings import SHAREPOINT_CONFIG
+# No longer need SHAREPOINT_CONFIG as site_url is passed per tool
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -40,19 +40,14 @@ class SharePointContext:
         return is_valid
 
     def test_connection(self) -> bool:
-        """Test the connection to SharePoint."""
+        """Test the connection to Microsoft Graph API."""
         try:
             import requests
-            # Extract site domain and name from site URL
-            site_parts = SHAREPOINT_CONFIG["site_url"].replace("https://", "").split("/")
-            domain = site_parts[0]
-            site_name = site_parts[2] if len(site_parts) > 2 else "root"
+            # Simple test - just check if we can access the Graph API /me endpoint
+            test_url = f"{self.graph_url}/me"
+            logger.debug(f"Testing connection to: {test_url}")
             
-            # Get site information via Microsoft Graph API
-            site_url = f"{self.graph_url}/sites/{domain}:/sites/{site_name}"
-            logger.debug(f"Testing connection to: {site_url}")
-            
-            response = requests.get(site_url, headers=self.headers)
+            response = requests.get(test_url, headers=self.headers)
             
             if response.status_code != 200:
                 logger.error(f"Connection test failed: HTTP {response.status_code} - {response.text}")

@@ -11,11 +11,12 @@ APP_NAME = "SharePoint MCP"
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 
 # SharePoint connection settings
+# Note: site_url is now passed as a parameter to each tool
+# rather than being configured globally
 SHAREPOINT_CONFIG = {
     "tenant_id": os.getenv("TENANT_ID", ""),
     "client_id": os.getenv("CLIENT_ID", ""),
     "client_secret": os.getenv("CLIENT_SECRET", ""),
-    "site_url": os.getenv("SITE_URL", ""),
     "username": os.getenv("USERNAME", ""),
     "password": os.getenv("PASSWORD", ""),
     "scope": [
