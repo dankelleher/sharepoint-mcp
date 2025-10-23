@@ -55,6 +55,23 @@ class TestSharePointConnection:
         print(f"✓ Authentication successful")
 
     @pytest.mark.asyncio
+    async def test_list_sites(self):
+        """Test listing all SharePoint sites."""
+        context = await get_auth_context()
+        service = SharePointService(context)
+
+        result = await service.list_sites()
+
+        assert result is not None
+        assert "sites" in result
+        assert "count" in result
+        assert result["count"] > 0  # Should have at least one site
+
+        print(f"✓ Listed {result['count']} sites")
+        for site in result["sites"][:3]:  # Show first 3 sites
+            print(f"  - {site['name']}: {site['webUrl']}")
+
+    @pytest.mark.asyncio
     async def test_get_site_info(self):
         """Test retrieving site information."""
         context = await get_auth_context()

@@ -230,7 +230,21 @@ class GraphClient:
         endpoint = f"sites/{domain}:/sites/{site_name}"
         logger.info(f"Getting site info for domain: {domain}, site: {site_name}")
         return await self.get(endpoint)
-    
+
+    async def list_sites(self, search_query: str = "*") -> Dict[str, Any]:
+        """List SharePoint sites accessible to the user.
+
+        Args:
+            search_query: Search query for filtering sites. Use "*" for all sites.
+                         Examples: "*", "project*", "team"
+
+        Returns:
+            List of sites with their information
+        """
+        endpoint = f"sites?search={search_query}"
+        logger.info(f"Listing sites with search query: {search_query}")
+        return await self.get(endpoint)
+
     async def list_document_libraries(self, domain: str, site_name: str) -> Dict[str, Any]:
         """List all document libraries in the site.
         

@@ -18,6 +18,28 @@ def register_site_tools(mcp: FastMCP):
     # Site Operations
 
     @mcp.tool()
+    async def list_sites(ctx: Context, search_query: str = "*") -> str:
+        """List all SharePoint sites accessible to the current user.
+
+        Args:
+            search_query: Optional search query to filter sites. Use "*" for all sites.
+                         Examples: "*", "project*", "team"
+
+        Returns:
+            JSON list of sites with their names, URLs, IDs, and metadata.
+        """
+        logger.info(f"Tool called: list_sites with query: {search_query}")
+        try:
+            sp_ctx = ctx.request_context.lifespan_context
+            await refresh_token_if_needed(sp_ctx)
+            service = SharePointService(sp_ctx)
+            result = await service.list_sites(search_query)
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            logger.error(f"Error in list_sites: {str(e)}")
+            return f"Error listing sites: {str(e)}"
+
+    @mcp.tool()
     async def get_site_info(ctx: Context, site_url: str) -> str:
         """Get basic information about the SharePoint site."""
         logger.info(f"Tool called: get_site_info for {site_url}")

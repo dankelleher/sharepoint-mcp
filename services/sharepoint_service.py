@@ -55,6 +55,29 @@ class SharePointService:
 
     # Site Operations
 
+    async def list_sites(self, search_query: str = "*") -> Dict[str, Any]:
+        """List all SharePoint sites accessible to the user.
+
+        Args:
+            search_query: Search query to filter sites. Use "*" for all sites.
+
+        Returns:
+            Dictionary with list of sites and count
+        """
+        result = await self.graph_client.list_sites(search_query)
+
+        sites = result.get("value", [])
+        formatted_sites = [{
+            "name": site.get("displayName", "Unknown"),
+            "description": site.get("description", ""),
+            "webUrl": site.get("webUrl", ""),
+            "id": site.get("id", ""),
+            "created": site.get("createdDateTime", "Unknown"),
+            "lastModified": site.get("lastModifiedDateTime", "Unknown")
+        } for site in sites]
+
+        return {"sites": formatted_sites, "count": len(formatted_sites)}
+
     async def get_site_info(self, site_url: str) -> Dict[str, Any]:
         """Get basic information about the SharePoint site."""
         domain, site_name = parse_site_url(site_url)
