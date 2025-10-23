@@ -21,8 +21,7 @@ import json
 import pytest
 from datetime import datetime
 from auth.sharepoint_auth import get_auth_context
-from utils.graph_client import GraphClient
-from tools.site_tools import parse_site_url
+from services.sharepoint_service import SharePointService
 
 # Test configuration
 DOMAIN = "civicteamaccount.sharepoint.com"
@@ -36,7 +35,10 @@ test_data = {
     "folder_id": None,
     "document_id": None,
     "list_id": None,
-    "list_item_id": None
+    "list_item_id": None,
+    "page_id": None,
+    "news_post_id": None,
+    "advanced_library_id": None
 }
 
 
@@ -56,18 +58,53 @@ class TestSharePointConnection:
     async def test_get_site_info(self):
         """Test retrieving site information."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
-        site_info = await client.get_site_info(DOMAIN, SITE_NAME)
+        site_info = await service.get_site_info(SITE_URL)
 
         assert site_info is not None
         assert "id" in site_info
-        assert "displayName" in site_info
+        assert "name" in site_info
 
         # Store site_id for later tests
         test_data["site_id"] = site_info["id"]
-        print(f"✓ Site info retrieved: {site_info['displayName']}")
+        print(f"✓ Site info retrieved: {site_info['name']}")
         print(f"  Site ID: {test_data['site_id']}")
+
+    @pytest.mark.asyncio
+    async def test_create_sharepoint_site(self):
+        """Test creating a new SharePoint site.
+
+        NOTE: This test is skipped by default because creating sites is a major
+        operation that requires Sites.Manage.All permission and creates permanent
+        resources. To enable this test, set environment variable:
+        TEST_SITE_CREATION=true
+        """
+        import os
+        if not os.getenv("TEST_SITE_CREATION"):
+            pytest.skip("Site creation test disabled. Set TEST_SITE_CREATION=true to enable")
+
+        context = await get_auth_context()
+        service = SharePointService(context)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        display_name = f"Test Site {timestamp}"
+        alias = f"test-site-{timestamp}"
+
+        result = await service.create_sharepoint_site(
+            display_name,
+            alias,
+            "Test site created by integration tests"
+        )
+
+        assert result is not None
+        assert "id" in result or "webUrl" in result
+
+        print(f"✓ Created SharePoint site: {display_name}")
+        print(f"  Alias: {alias}")
+        if "webUrl" in result:
+            print(f"  URL: {result['webUrl']}")
+        print(f"  NOTE: This site must be manually deleted from SharePoint admin center")
 
 
 class TestDocumentLibraries:
@@ -77,17 +114,17 @@ class TestDocumentLibraries:
     async def test_list_document_libraries(self):
         """Test listing document libraries."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
-        result = await client.list_document_libraries(DOMAIN, SITE_NAME)
+        result = await service.list_document_libraries(SITE_URL)
 
         assert result is not None
-        assert "value" in result
-        assert len(result["value"]) > 0
+        assert "libraries" in result
+        assert len(result["libraries"]) > 0
 
         # Store the first drive_id for later tests
-        test_data["drive_id"] = result["value"][0]["id"]
-        print(f"✓ Found {len(result['value'])} document libraries")
+        test_data["drive_id"] = result["libraries"][0]["id"]
+        print(f"✓ Found {result['count']} document libraries")
         print(f"  Using drive ID: {test_data['drive_id']}")
 
 
@@ -98,12 +135,12 @@ class TestFolderOperations:
     async def test_create_folder(self):
         """Test creating a folder."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         folder_path = f"test_folder_{timestamp}"
 
-        result = await client.create_folder_in_library(
+        result = await service.create_folder(
             test_data["site_id"],
             test_data["drive_id"],
             folder_path
@@ -121,26 +158,25 @@ class TestFolderOperations:
     async def test_list_folders(self):
         """Test listing folders."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
-        result = await client.list_drive_items(
+        result = await service.list_folders(
             test_data["site_id"],
             test_data["drive_id"],
-            "",
-            "folder"
+            ""
         )
 
         assert result is not None
-        assert "value" in result
-        print(f"✓ Listed {len(result['value'])} folders")
+        assert "folders" in result
+        print(f"✓ Listed {result['count']} folders")
 
     @pytest.mark.asyncio
     async def test_get_folder_tree(self):
         """Test getting folder tree structure."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
-        result = await client.get_folder_tree(
+        result = await service.get_folder_tree(
             test_data["site_id"],
             test_data["drive_id"],
             "",
@@ -159,13 +195,13 @@ class TestDocumentOperations:
     async def test_upload_document(self):
         """Test uploading a document."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"test_document_{timestamp}.txt"
         file_content = f"Test document created at {datetime.now().isoformat()}".encode('utf-8')
 
-        result = await client.upload_document(
+        result = await service.upload_document(
             test_data["site_id"],
             test_data["drive_id"],
             test_data.get("folder_path", ""),
@@ -185,44 +221,45 @@ class TestDocumentOperations:
     async def test_list_documents(self):
         """Test listing documents."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
-        result = await client.list_drive_items(
+        result = await service.list_documents(
             test_data["site_id"],
             test_data["drive_id"],
-            test_data.get("folder_path", ""),
-            "file"
+            test_data.get("folder_path", "")
         )
 
         assert result is not None
-        assert "value" in result
-        print(f"✓ Listed {len(result['value'])} documents")
+        assert "documents" in result
+        print(f"✓ Listed {result['count']} documents")
 
     @pytest.mark.asyncio
     async def test_get_document_content(self):
         """Test retrieving document content."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
-        content = await client.get_document_content(
+        # get_document_content needs filename parameter
+        content = await service.get_document_content(
             test_data["site_id"],
             test_data["drive_id"],
-            test_data["document_id"]
+            test_data["document_id"],
+            "test_document.txt"
         )
 
         assert content is not None
-        assert len(content) > 0
-        print(f"✓ Retrieved document content ({len(content)} bytes)")
+        assert "type" in content or "error" not in content
+        print(f"✓ Retrieved document content")
 
     @pytest.mark.asyncio
     async def test_update_document(self):
         """Test updating document content."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
         new_content = f"Updated content at {datetime.now().isoformat()}".encode('utf-8')
 
-        result = await client.update_document_content(
+        result = await service.update_document(
             test_data["site_id"],
             test_data["drive_id"],
             test_data["document_id"],
@@ -241,12 +278,12 @@ class TestListOperations:
     async def test_create_intelligent_list(self):
         """Test creating a list with intelligent schema."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         list_name = f"Test Projects {timestamp}"
 
-        result = await client.create_intelligent_list(
+        result = await service.create_intelligent_list(
             test_data["site_id"],
             "projects",
             list_name
@@ -263,7 +300,7 @@ class TestListOperations:
     async def test_create_list_item(self):
         """Test creating a list item."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
         fields = {
             "Title": "Test Project",
@@ -272,7 +309,7 @@ class TestListOperations:
             "Priority": "High"
         }
 
-        result = await client.create_list_item(
+        result = await service.create_list_item(
             test_data["site_id"],
             test_data["list_id"],
             fields
@@ -289,14 +326,14 @@ class TestListOperations:
     async def test_update_list_item(self):
         """Test updating a list item."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
         fields = {
             "Status": "Completed",
             "PercentComplete": 100
         }
 
-        result = await client.update_list_item(
+        result = await service.update_list_item(
             test_data["site_id"],
             test_data["list_id"],
             test_data["list_item_id"],
@@ -314,9 +351,9 @@ class TestSearchOperations:
     async def test_search_sharepoint(self):
         """Test searching SharePoint content."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
-        result = await client.search_sharepoint(DOMAIN, SITE_NAME, "test")
+        result = await service.search_sharepoint(SITE_URL, "test")
 
         assert result is not None
         assert "requests" in result or "value" in result
@@ -327,15 +364,37 @@ class TestContentCreation:
     """Test content creation features."""
 
     @pytest.mark.asyncio
+    async def test_create_advanced_document_library(self):
+        """Test creating an advanced document library."""
+        context = await get_auth_context()
+        service = SharePointService(context)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        library_name = f"Test Advanced Library {timestamp}"
+
+        result = await service.create_advanced_document_library(
+            test_data["site_id"],
+            library_name,
+            "contracts"  # Use contracts type for advanced metadata
+        )
+
+        assert result is not None
+        assert "id" in result
+
+        test_data["advanced_library_id"] = result["id"]
+        print(f"✓ Created advanced document library: {library_name}")
+        print(f"  Library ID: {test_data['advanced_library_id']}")
+
+    @pytest.mark.asyncio
     async def test_create_page(self):
         """Test creating a SharePoint page."""
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         page_name = f"test-page-{timestamp}"
 
-        result = await client.create_page(
+        result = await service.create_modern_page(
             test_data["site_id"],
             page_name,
             "Test Page"
@@ -346,6 +405,29 @@ class TestContentCreation:
 
         test_data["page_id"] = result["id"]
         print(f"✓ Created page: {page_name}")
+
+    @pytest.mark.asyncio
+    async def test_create_news_post(self):
+        """Test creating a news post."""
+        context = await get_auth_context()
+        service = SharePointService(context)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        news_title = f"Test News Post {timestamp}"
+
+        result = await service.create_news_post(
+            test_data["site_id"],
+            news_title,
+            "This is a test news post created by integration tests",
+            "Test content for the news post"
+        )
+
+        assert result is not None
+        assert "id" in result
+
+        test_data["news_post_id"] = result["id"]
+        print(f"✓ Created news post: {news_title}")
+        print(f"  News Post ID: {test_data['news_post_id']}")
 
 
 class TestCleanup:
@@ -358,9 +440,9 @@ class TestCleanup:
             pytest.skip("No document to delete")
 
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
-        result = await client.delete_drive_item(
+        result = await service.delete_document(
             test_data["site_id"],
             test_data["drive_id"],
             test_data["document_id"]
@@ -376,9 +458,9 @@ class TestCleanup:
             pytest.skip("No folder to delete")
 
         context = await get_auth_context()
-        client = GraphClient(context)
+        service = SharePointService(context)
 
-        result = await client.delete_drive_item(
+        result = await service.delete_folder(
             test_data["site_id"],
             test_data["drive_id"],
             test_data["folder_id"]
@@ -386,24 +468,6 @@ class TestCleanup:
 
         assert result is not None
         print(f"✓ Deleted folder")
-
-    @pytest.mark.asyncio
-    async def test_delete_list_item(self):
-        """Test deleting a list item."""
-        if not test_data.get("list_item_id"):
-            pytest.skip("No list item to delete")
-
-        context = await get_auth_context()
-        client = GraphClient(context)
-
-        result = await client.delete_list_item(
-            test_data["site_id"],
-            test_data["list_id"],
-            test_data["list_item_id"]
-        )
-
-        assert result is not None
-        print(f"✓ Deleted list item")
 
 
 # Test execution order

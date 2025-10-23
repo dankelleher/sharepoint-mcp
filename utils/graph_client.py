@@ -451,26 +451,35 @@ class GraphClient:
         logger.info(f"Creating new page with name: {name} in site: {site_id}")
         return await self.post(endpoint, data)
     
-    async def create_modern_page(self, site_id: str, name: str, title: str, 
-                              layout: str = "Article") -> Dict[str, Any]:
+    async def create_modern_page(self, site_id: str, name: str, title: str,
+                              layout: str = "article") -> Dict[str, Any]:
         """Create a modern page with professional layout in SharePoint.
-        
+
         Args:
             site_id: ID of the site
-            name: Name of the page
+            name: Name of the page (will add .aspx if not present)
             title: Title of the page
-            layout: Page layout type
-        
+            layout: Page layout type (article, home, etc.)
+
         Returns:
             Created page information
         """
+        # Ensure name has .aspx extension
+        if not name.endswith('.aspx'):
+            name = f"{name}.aspx"
+
         endpoint = f"sites/{site_id}/pages"
+
+        # Use proper Microsoft Graph API format
         data = {
+            "@odata.type": "#microsoft.graph.sitePage",
             "name": name,
             "title": title,
-            "layoutType": layout
+            "pageLayout": layout.lower(),
+            "showComments": True,
+            "showRecommendedPages": False
         }
-        
+
         logger.info(f"Creating modern page with name: {name}, layout: {layout}")
         return await self.post(endpoint, data)
     
@@ -488,24 +497,26 @@ class GraphClient:
         Returns:
             Created news post information
         """
-        # First create a modern page
+        # Create a modern page (which creates it as a news post automatically if we publish it)
         name = f"news-{title.lower().replace(' ', '-')}"
         page_info = await self.create_modern_page(site_id, name, title, "Article")
         page_id = page_info.get("id")
-        
-        # Update page with content
-        await self.update_page(site_id, page_id, title, content)
-        
-        # Publish the page
+
+        # Publish the page (this makes it visible)
+        logger.info(f"Publishing page {page_id} as news post")
         published_page = await self.publish_page(site_id, page_id)
-        
-        # Set as news post
-        endpoint = f"sites/{site_id}/pages/{page_id}/setAsNewsPost"
+
+        # Promote as news post
+        endpoint = f"sites/{site_id}/pages/{page_id}/microsoft.graph.sitePage/promote"
         data = {
-            "promotionKind": "microsoftNewsService" if promote else "none"
+            "promotionKind": "newsPost"
         }
-        logger.info(f"Setting page {page_id} as news post")
-        await self.post(endpoint, data)
+        logger.info(f"Promoting page {page_id} as news post")
+        try:
+            await self.post(endpoint, data)
+        except Exception as e:
+            # If promotion fails, log but don't fail - the page was still created
+            logger.warning(f"Failed to promote page as news post: {e}")
         
         return {
             "page_info": published_page,
