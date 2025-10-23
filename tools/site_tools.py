@@ -504,7 +504,7 @@ def register_site_tools(mcp: FastMCP):
         filename: str
     ) -> str:
         """Get and process content from a SharePoint document.
-        
+
         Args:
             site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
             site_id: ID of the site
@@ -513,27 +513,327 @@ def register_site_tools(mcp: FastMCP):
             filename: Name of the file (for content type detection)
         """
         logger.info(f"Tool called: get_document_content for {filename} in site {site_url}")
-        
+
         try:
             # Get authentication context from context object
             sp_ctx = ctx.request_context.lifespan_context
-            
+
             # Refresh token if needed
             await refresh_token_if_needed(sp_ctx)
-            
+
             # Create Graph client and document processor
             graph_client = GraphClient(sp_ctx)
             processor = DocumentProcessor()
-            
+
             # Download document content
             content = await graph_client.download_document(site_id, drive_id, item_id)
-            
+
             # Process document based on file type
             processed_content = processor.process_document(content, filename)
-            
+
             logger.info(f"Successfully retrieved and processed document: {filename}")
             return json.dumps(processed_content, indent=2)
-            
+
         except Exception as e:
             logger.error(f"Error in get_document_content: {str(e)}")
             return f"Error getting document content: {str(e)}"
+
+    @mcp.tool()
+    async def list_folders(
+        ctx: Context,
+        site_url: str,
+        site_id: str,
+        drive_id: str,
+        folder_path: str = ""
+    ) -> str:
+        """List all folders in a SharePoint document library location.
+
+        Args:
+            site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
+            site_id: ID of the site
+            drive_id: ID of the document library
+            folder_path: Path to the folder (empty string for root)
+        """
+        logger.info(f"Tool called: list_folders for {site_url} in {folder_path or 'root'}")
+
+        try:
+            # Get authentication context from context object
+            sp_ctx = ctx.request_context.lifespan_context
+
+            # Refresh token if needed
+            await refresh_token_if_needed(sp_ctx)
+
+            # Create Graph client
+            graph_client = GraphClient(sp_ctx)
+
+            # List folders
+            result = await graph_client.list_drive_items(site_id, drive_id, folder_path, 'folder')
+
+            # Extract and format folder information
+            folders = result.get("value", [])
+            formatted_folders = [{
+                "name": folder.get("name", "Unknown"),
+                "id": folder.get("id", "Unknown"),
+                "webUrl": folder.get("webUrl", ""),
+                "created": folder.get("createdDateTime", "Unknown"),
+                "modified": folder.get("lastModifiedDateTime", "Unknown"),
+                "size": folder.get("size", 0),
+                "childCount": folder.get("folder", {}).get("childCount", 0)
+            } for folder in folders]
+
+            logger.info(f"Successfully retrieved {len(formatted_folders)} folders")
+            return json.dumps(formatted_folders, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in list_folders: {str(e)}")
+            return f"Error listing folders: {str(e)}"
+
+    @mcp.tool()
+    async def create_folder(
+        ctx: Context,
+        site_url: str,
+        site_id: str,
+        drive_id: str,
+        folder_path: str
+    ) -> str:
+        """Create a new folder in a SharePoint document library.
+
+        Args:
+            site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
+            site_id: ID of the site
+            drive_id: ID of the document library
+            folder_path: Path of the folder to create (e.g., "Projects/2024" for nested folders)
+        """
+        logger.info(f"Tool called: create_folder for {site_url} at {folder_path}")
+
+        try:
+            # Get authentication context from context object
+            sp_ctx = ctx.request_context.lifespan_context
+
+            # Refresh token if needed
+            await refresh_token_if_needed(sp_ctx)
+
+            # Create Graph client
+            graph_client = GraphClient(sp_ctx)
+
+            # Create folder
+            result = await graph_client.create_folder_in_library(site_id, drive_id, folder_path)
+
+            logger.info(f"Successfully created folder: {folder_path}")
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in create_folder: {str(e)}")
+            return f"Error creating folder: {str(e)}"
+
+    @mcp.tool()
+    async def delete_folder(
+        ctx: Context,
+        site_url: str,
+        site_id: str,
+        drive_id: str,
+        folder_id: str
+    ) -> str:
+        """Delete a folder from a SharePoint document library.
+
+        Args:
+            site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
+            site_id: ID of the site
+            drive_id: ID of the document library
+            folder_id: ID of the folder to delete
+        """
+        logger.info(f"Tool called: delete_folder for {site_url}, folder_id: {folder_id}")
+
+        try:
+            # Get authentication context from context object
+            sp_ctx = ctx.request_context.lifespan_context
+
+            # Refresh token if needed
+            await refresh_token_if_needed(sp_ctx)
+
+            # Create Graph client
+            graph_client = GraphClient(sp_ctx)
+
+            # Delete folder
+            result = await graph_client.delete_drive_item(site_id, drive_id, folder_id)
+
+            logger.info(f"Successfully deleted folder: {folder_id}")
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in delete_folder: {str(e)}")
+            return f"Error deleting folder: {str(e)}"
+
+    @mcp.tool()
+    async def get_folder_tree(
+        ctx: Context,
+        site_url: str,
+        site_id: str,
+        drive_id: str,
+        folder_path: str = "",
+        max_depth: int = 10
+    ) -> str:
+        """Get a recursive tree structure of folders in a SharePoint document library.
+
+        Args:
+            site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
+            site_id: ID of the site
+            drive_id: ID of the document library
+            folder_path: Starting folder path (empty string for root)
+            max_depth: Maximum depth to traverse (default: 10)
+        """
+        logger.info(f"Tool called: get_folder_tree for {site_url} starting at {folder_path or 'root'}")
+
+        try:
+            # Get authentication context from context object
+            sp_ctx = ctx.request_context.lifespan_context
+
+            # Refresh token if needed
+            await refresh_token_if_needed(sp_ctx)
+
+            # Create Graph client
+            graph_client = GraphClient(sp_ctx)
+
+            # Get folder tree
+            result = await graph_client.get_folder_tree(site_id, drive_id, folder_path, max_depth)
+
+            logger.info(f"Successfully retrieved folder tree")
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in get_folder_tree: {str(e)}")
+            return f"Error getting folder tree: {str(e)}"
+
+    @mcp.tool()
+    async def list_documents(
+        ctx: Context,
+        site_url: str,
+        site_id: str,
+        drive_id: str,
+        folder_path: str = ""
+    ) -> str:
+        """List all documents in a SharePoint document library location.
+
+        Args:
+            site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
+            site_id: ID of the site
+            drive_id: ID of the document library
+            folder_path: Path to the folder (empty string for root)
+        """
+        logger.info(f"Tool called: list_documents for {site_url} in {folder_path or 'root'}")
+
+        try:
+            # Get authentication context from context object
+            sp_ctx = ctx.request_context.lifespan_context
+
+            # Refresh token if needed
+            await refresh_token_if_needed(sp_ctx)
+
+            # Create Graph client
+            graph_client = GraphClient(sp_ctx)
+
+            # List documents
+            result = await graph_client.list_drive_items(site_id, drive_id, folder_path, 'file')
+
+            # Extract and format document information
+            documents = result.get("value", [])
+            formatted_documents = [{
+                "name": doc.get("name", "Unknown"),
+                "id": doc.get("id", "Unknown"),
+                "webUrl": doc.get("webUrl", ""),
+                "created": doc.get("createdDateTime", "Unknown"),
+                "modified": doc.get("lastModifiedDateTime", "Unknown"),
+                "size": doc.get("size", 0),
+                "mimeType": doc.get("file", {}).get("mimeType", "Unknown"),
+                "createdBy": doc.get("createdBy", {}).get("user", {}).get("displayName", "Unknown"),
+                "modifiedBy": doc.get("lastModifiedBy", {}).get("user", {}).get("displayName", "Unknown")
+            } for doc in documents]
+
+            logger.info(f"Successfully retrieved {len(formatted_documents)} documents")
+            return json.dumps(formatted_documents, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in list_documents: {str(e)}")
+            return f"Error listing documents: {str(e)}"
+
+    @mcp.tool()
+    async def update_document(
+        ctx: Context,
+        site_url: str,
+        site_id: str,
+        drive_id: str,
+        item_id: str,
+        file_content: bytes,
+        content_type: str = "application/octet-stream"
+    ) -> str:
+        """Update the content of an existing document in SharePoint.
+
+        Args:
+            site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
+            site_id: ID of the site
+            drive_id: ID of the document library
+            item_id: ID of the document to update
+            file_content: New content of the file as bytes
+            content_type: MIME type of the file
+        """
+        logger.info(f"Tool called: update_document for {site_url}, item_id: {item_id}")
+
+        try:
+            # Get authentication context from context object
+            sp_ctx = ctx.request_context.lifespan_context
+
+            # Refresh token if needed
+            await refresh_token_if_needed(sp_ctx)
+
+            # Create Graph client
+            graph_client = GraphClient(sp_ctx)
+
+            # Update document
+            result = await graph_client.update_document_content(
+                site_id, drive_id, item_id, file_content, content_type
+            )
+
+            logger.info(f"Successfully updated document: {item_id}")
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in update_document: {str(e)}")
+            return f"Error updating document: {str(e)}"
+
+    @mcp.tool()
+    async def delete_document(
+        ctx: Context,
+        site_url: str,
+        site_id: str,
+        drive_id: str,
+        item_id: str
+    ) -> str:
+        """Delete a document from a SharePoint document library.
+
+        Args:
+            site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
+            site_id: ID of the site
+            drive_id: ID of the document library
+            item_id: ID of the document to delete
+        """
+        logger.info(f"Tool called: delete_document for {site_url}, item_id: {item_id}")
+
+        try:
+            # Get authentication context from context object
+            sp_ctx = ctx.request_context.lifespan_context
+
+            # Refresh token if needed
+            await refresh_token_if_needed(sp_ctx)
+
+            # Create Graph client
+            graph_client = GraphClient(sp_ctx)
+
+            # Delete document
+            result = await graph_client.delete_drive_item(site_id, drive_id, item_id)
+
+            logger.info(f"Successfully deleted document: {item_id}")
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in delete_document: {str(e)}")
+            return f"Error deleting document: {str(e)}"

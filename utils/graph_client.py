@@ -632,15 +632,15 @@ class GraphClient:
             logger.warning("Implementing simple upload instead, which might fail for large files.")
             return await self.upload_file(endpoint, file_content, content_type)
     
-    async def create_folder_in_library(self, site_id: str, drive_id: str, 
+    async def create_folder_in_library(self, site_id: str, drive_id: str,
                                     folder_path: str) -> Dict[str, Any]:
         """Create a folder in a document library.
-        
+
         Args:
             site_id: ID of the site
             drive_id: ID of the document library
             folder_path: Path of the folder to create
-        
+
         Returns:
             Created folder information
         """
@@ -648,20 +648,20 @@ class GraphClient:
         parts = folder_path.split('/')
         current_path = ""
         result = None
-        
+
         # Create each level of the folder path
         for i, part in enumerate(parts):
             if not part:
                 continue
-                
+
             if current_path:
                 current_path += f"/{part}"
             else:
                 current_path = part
-                
+
             # Create the folder
             endpoint = f"sites/{site_id}/drives/{drive_id}/root:/{current_path}"
-            
+
             try:
                 # Check if folder exists
                 result = await self.get(endpoint)
@@ -674,16 +674,130 @@ class GraphClient:
                     "folder": {},
                     "@microsoft.graph.conflictBehavior": "rename"
                 }
-                
+
                 # If it's not the root level, specify the parent folder
                 if i > 0:
                     parent_path = "/".join(parts[:i])
                     endpoint = f"sites/{site_id}/drives/{drive_id}/root:/{parent_path}:/children"
-                
+
                 logger.info(f"Creating folder '{part}' in path '{current_path}'")
                 result = await self.post(endpoint, data)
-        
+
         return result
+
+    async def list_drive_items(self, site_id: str, drive_id: str,
+                              folder_path: str = "",
+                              item_type: Optional[str] = None) -> Dict[str, Any]:
+        """List files and/or folders in a drive location.
+
+        Args:
+            site_id: ID of the site
+            drive_id: ID of the document library
+            folder_path: Path to the folder (empty string for root)
+            item_type: Filter by type - 'folder', 'file', or None for all
+
+        Returns:
+            List of drive items with metadata
+        """
+        # Build the endpoint
+        if folder_path and folder_path != '/':
+            endpoint = f"sites/{site_id}/drives/{drive_id}/root:/{folder_path}:/children"
+        else:
+            endpoint = f"sites/{site_id}/drives/{drive_id}/root/children"
+
+        # Add filter for item type if specified
+        if item_type == 'folder':
+            endpoint += "?$filter=folder ne null"
+        elif item_type == 'file':
+            endpoint += "?$filter=file ne null"
+
+        logger.info(f"Listing {item_type or 'all'} items in {folder_path or 'root'}")
+        return await self.get(endpoint)
+
+    async def delete_drive_item(self, site_id: str, drive_id: str, item_id: str) -> Dict[str, Any]:
+        """Delete a file or folder from a drive.
+
+        Args:
+            site_id: ID of the site
+            drive_id: ID of the document library
+            item_id: ID of the item to delete
+
+        Returns:
+            Status information
+        """
+        endpoint = f"sites/{site_id}/drives/{drive_id}/items/{item_id}"
+        logger.info(f"Deleting drive item {item_id}")
+        return await self.delete(endpoint)
+
+    async def get_folder_tree(self, site_id: str, drive_id: str,
+                            folder_path: str = "",
+                            max_depth: int = 10,
+                            current_depth: int = 0) -> Dict[str, Any]:
+        """Get a recursive tree structure of folders.
+
+        Args:
+            site_id: ID of the site
+            drive_id: ID of the document library
+            folder_path: Starting folder path (empty string for root)
+            max_depth: Maximum depth to traverse
+            current_depth: Current recursion depth (internal use)
+
+        Returns:
+            Hierarchical folder structure
+        """
+        if current_depth >= max_depth:
+            logger.warning(f"Reached maximum depth {max_depth}")
+            return {"folders": [], "truncated": True}
+
+        # Get folders at current level
+        items_result = await self.list_drive_items(site_id, drive_id, folder_path, 'folder')
+        folders = items_result.get("value", [])
+
+        folder_tree = []
+        for folder in folders:
+            folder_name = folder.get("name", "")
+            folder_id = folder.get("id", "")
+
+            # Build path for subfolder
+            if folder_path:
+                subfolder_path = f"{folder_path}/{folder_name}"
+            else:
+                subfolder_path = folder_name
+
+            # Recursively get subfolders
+            subfolder_tree = await self.get_folder_tree(
+                site_id, drive_id, subfolder_path, max_depth, current_depth + 1
+            )
+
+            folder_tree.append({
+                "name": folder_name,
+                "id": folder_id,
+                "path": subfolder_path,
+                "webUrl": folder.get("webUrl", ""),
+                "subfolders": subfolder_tree.get("folders", []),
+                "truncated": subfolder_tree.get("truncated", False)
+            })
+
+        return {"folders": folder_tree}
+
+    async def update_document_content(self, site_id: str, drive_id: str,
+                                     item_id: str, file_content: bytes,
+                                     content_type: str = None) -> Dict[str, Any]:
+        """Update the content of an existing document.
+
+        Args:
+            site_id: ID of the site
+            drive_id: ID of the document library
+            item_id: ID of the document to update
+            file_content: New content as bytes
+            content_type: MIME type of the file
+
+        Returns:
+            Updated document information
+        """
+        endpoint = f"sites/{site_id}/drives/{drive_id}/items/{item_id}/content"
+        logger.info(f"Updating content of document {item_id}")
+        return await self.upload_file(endpoint, file_content, content_type)
     
     async def create_intelligent_list(self, site_id: str, purpose: str, 
                                    display_name: str) -> Dict[str, Any]:

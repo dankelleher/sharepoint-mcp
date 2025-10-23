@@ -12,10 +12,13 @@ SharePoint Model Context Protocol (MCP) server acts as a bridge that enables LLM
 ## Features
 
 - **Browse Document Libraries**: View contents of SharePoint document libraries
+- **Folder Management**: List, create, delete folders and get recursive folder trees
+- **Document Management**: List, upload, update, and delete documents with metadata
 - **Access List Data**: Retrieve and manipulate SharePoint list data
-- **Retrieve Document Content**: Access content from specific documents
+- **Retrieve Document Content**: Access and process content from documents (PDF, Word, Excel, CSV, etc.)
 - **SharePoint Search**: Search across your entire site
 - **Create List Items**: Add new items to SharePoint lists
+- **Modern Page & News Creation**: Create SharePoint pages and news posts
 
 ## Prerequisites
 
@@ -169,6 +172,37 @@ create_response = requests.post(
     data=json.dumps(new_item)
 )
 ```
+
+## Available MCP Tools
+
+### Site Management
+- `get_site_info` - Get basic information about a SharePoint site
+- `list_document_libraries` - List all document libraries in a site
+- `search_sharepoint` - Search content across the site
+- `create_sharepoint_site` - Create a new SharePoint site
+
+### Folder Operations
+- `list_folders` - List all folders in a document library location
+- `create_folder` - Create new folders (supports nested paths)
+- `delete_folder` - Delete a folder from a document library
+- `get_folder_tree` - Get recursive folder structure with configurable depth
+
+### Document Operations
+- `list_documents` - List all documents with metadata (name, size, created/modified dates, authors)
+- `get_document_content` - Retrieve and process document content (supports PDF, Word, Excel, CSV, text)
+- `upload_document` - Upload new documents to SharePoint
+- `update_document` - Update content of existing documents
+- `delete_document` - Delete documents from SharePoint
+
+### List Management
+- `create_intelligent_list` - Create lists with AI-optimized schemas based on purpose
+- `create_list_item` - Add new items to SharePoint lists
+- `update_list_item` - Update existing list items
+
+### Content Creation
+- `create_advanced_document_library` - Create document libraries with metadata and folder structure
+- `create_modern_page` - Create modern SharePoint pages with layouts
+- `create_news_post` - Create and publish news posts
 
 ## Integrating with Claude
 
