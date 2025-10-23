@@ -243,14 +243,47 @@ class GraphClient:
         logger.info(f"Listing document libraries for domain: {domain}, site: {site_name}")
         return await self.get(endpoint)
     
+    async def search_sharepoint(self, domain: str, site_name: str, query: str) -> Dict[str, Any]:
+        """Search content in a SharePoint site.
+
+        Args:
+            domain: SharePoint domain
+            site_name: Name of the site
+            query: Search query string
+
+        Returns:
+            Search results
+        """
+        endpoint = "search/query"
+
+        # Get the site URL to limit search scope
+        site_url = f"https://{domain}/sites/{site_name}"
+
+        # Build search request
+        data = {
+            "requests": [
+                {
+                    "entityTypes": ["driveItem", "listItem", "site"],
+                    "query": {
+                        "queryString": f"{query} AND (Path:{site_url})"
+                    },
+                    "from": 0,
+                    "size": 25
+                }
+            ]
+        }
+
+        logger.info(f"Searching SharePoint for: {query} in site: {site_url}")
+        return await self.post(endpoint, data)
+
     async def create_site(self, display_name: str, alias: str, description: str = "") -> Dict[str, Any]:
         """Create a new SharePoint site.
-        
+
         Args:
             display_name: Display name of the site
             alias: Site alias (used in URL)
             description: Site description
-        
+
         Returns:
             Created site information
         """
@@ -390,20 +423,31 @@ class GraphClient:
     
     async def create_page(self, site_id: str, name: str, title: str = "") -> Dict[str, Any]:
         """Create a new page in a SharePoint site.
-        
+
         Args:
             site_id: ID of the site
-            name: Name of the page
+            name: Name of the page (will add .aspx if not present)
             title: Title of the page
-        
+
         Returns:
             Created page information
         """
         endpoint = f"sites/{site_id}/pages"
+
+        # Ensure name has .aspx extension
+        if not name.endswith('.aspx'):
+            name = f"{name}.aspx"
+
+        # Build proper request body according to Microsoft Graph API spec
         data = {
+            "@odata.type": "#microsoft.graph.sitePage",
             "name": name,
-            "title": title or name
+            "title": title or name.replace('.aspx', ''),
+            "pageLayout": "article",
+            "showComments": True,
+            "showRecommendedPages": False
         }
+
         logger.info(f"Creating new page with name: {name} in site: {site_id}")
         return await self.post(endpoint, data)
     
@@ -704,15 +748,27 @@ class GraphClient:
             endpoint = f"sites/{site_id}/drives/{drive_id}/root:/{folder_path}:/children"
         else:
             endpoint = f"sites/{site_id}/drives/{drive_id}/root/children"
-
-        # Add filter for item type if specified
-        if item_type == 'folder':
-            endpoint += "?$filter=folder ne null"
-        elif item_type == 'file':
-            endpoint += "?$filter=file ne null"
+            # Only add filter for root endpoint (path-based endpoints don't support $filter)
+            if item_type == 'folder':
+                endpoint += "?$filter=folder ne null"
+            elif item_type == 'file':
+                endpoint += "?$filter=file ne null"
 
         logger.info(f"Listing {item_type or 'all'} items in {folder_path or 'root'}")
-        return await self.get(endpoint)
+        result = await self.get(endpoint)
+
+        # For path-based endpoints, filter client-side if needed
+        if folder_path and folder_path != '/' and item_type:
+            items = result.get("value", [])
+            if item_type == 'folder':
+                filtered_items = [item for item in items if "folder" in item]
+            elif item_type == 'file':
+                filtered_items = [item for item in items if "file" in item]
+            else:
+                filtered_items = items
+            result["value"] = filtered_items
+
+        return result
 
     async def delete_drive_item(self, site_id: str, drive_id: str, item_id: str) -> Dict[str, Any]:
         """Delete a file or folder from a drive.

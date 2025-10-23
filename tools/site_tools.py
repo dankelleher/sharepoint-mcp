@@ -207,7 +207,7 @@ def register_site_tools(mcp: FastMCP):
         display_name: str
     ) -> str:
         """Create a SharePoint list with AI-optimized schema based on its purpose.
-        
+
         Args:
             site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
             site_id: ID of the site
@@ -215,27 +215,23 @@ def register_site_tools(mcp: FastMCP):
             display_name: Display name for the list
         """
         logger.info(f"Tool called: create_intelligent_list for site {site_url}")
-        
+
         try:
             # Get authentication context from context object
             sp_ctx = ctx.request_context.lifespan_context
-            
+
             # Refresh token if needed
             await refresh_token_if_needed(sp_ctx)
-            
-            # Create Graph client and content generator
+
+            # Create Graph client
             graph_client = GraphClient(sp_ctx)
-            generator = ContentGenerator()
-            
-            # Generate list schema based on purpose
-            list_config = generator.generate_list_schema(purpose, display_name)
-            
-            # Create the list
-            result = await graph_client.create_list(site_id, list_config)
-            
+
+            # Create the intelligent list (GraphClient has the schema logic built-in)
+            result = await graph_client.create_intelligent_list(site_id, purpose, display_name)
+
             logger.info(f"Successfully created intelligent list: {display_name}")
             return json.dumps(result, indent=2)
-            
+
         except Exception as e:
             logger.error(f"Error in create_intelligent_list: {str(e)}")
             return f"Error creating list: {str(e)}"
@@ -327,7 +323,7 @@ def register_site_tools(mcp: FastMCP):
         doc_type: str = "general"
     ) -> str:
         """Create a document library with advanced metadata settings.
-        
+
         Args:
             site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
             site_id: ID of the site
@@ -335,27 +331,23 @@ def register_site_tools(mcp: FastMCP):
             doc_type: Type of documents (general, contracts, marketing, reports, projects)
         """
         logger.info(f"Tool called: create_advanced_document_library for site {site_url}")
-        
+
         try:
             # Get authentication context from context object
             sp_ctx = ctx.request_context.lifespan_context
-            
+
             # Refresh token if needed
             await refresh_token_if_needed(sp_ctx)
-            
-            # Create Graph client and content generator
+
+            # Create Graph client
             graph_client = GraphClient(sp_ctx)
-            generator = ContentGenerator()
-            
-            # Generate library configuration based on document type
-            library_config = generator.generate_document_library_schema(doc_type, display_name)
-            
-            # Create the document library
-            result = await graph_client.create_document_library(site_id, library_config)
-            
+
+            # Create the document library (GraphClient has the schema logic built-in)
+            result = await graph_client.create_advanced_document_library(site_id, display_name, doc_type)
+
             logger.info(f"Successfully created document library: {display_name}")
             return json.dumps(result, indent=2)
-            
+
         except Exception as e:
             logger.error(f"Error in create_advanced_document_library: {str(e)}")
             return f"Error creating document library: {str(e)}"
@@ -412,40 +404,43 @@ def register_site_tools(mcp: FastMCP):
         site_url: str,
         site_id: str,
         name: str,
+        title: str = "",
         purpose: str = "general",
         audience: str = "general"
     ) -> str:
         """Create a modern SharePoint page with beautiful layout.
-        
+
         Args:
             site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
             site_id: ID of the site
             name: Name of the page (for URL)
+            title: Title of the page (optional, defaults to name)
             purpose: Purpose of the page (welcome, dashboard, team, project, announcement)
             audience: Target audience (general, executives, team, customers)
         """
         logger.info(f"Tool called: create_modern_page for site {site_url}")
-        
+
         try:
             # Get authentication context from context object
             sp_ctx = ctx.request_context.lifespan_context
-            
+
             # Refresh token if needed
             await refresh_token_if_needed(sp_ctx)
-            
-            # Create Graph client and content generator
+
+            # Create Graph client
             graph_client = GraphClient(sp_ctx)
-            generator = ContentGenerator()
-            
-            # Generate page content based on purpose and audience
-            page_config = generator.generate_page_content(purpose, audience, name)
-            
+
+            # Generate title if not provided
+            if not title:
+                generator = ContentGenerator()
+                title = generator.generate_page_title(purpose, name)
+
             # Create the page
-            result = await graph_client.create_page(site_id, page_config)
-            
+            result = await graph_client.create_page(site_id, name, title)
+
             logger.info(f"Successfully created modern page: {name}")
             return json.dumps(result, indent=2)
-            
+
         except Exception as e:
             logger.error(f"Error in create_modern_page: {str(e)}")
             return f"Error creating page: {str(e)}"
@@ -460,7 +455,7 @@ def register_site_tools(mcp: FastMCP):
         content: str = ""
     ) -> str:
         """Create a news post in a SharePoint site.
-        
+
         Args:
             site_url: The SharePoint site URL (e.g., https://example.sharepoint.com/sites/test)
             site_id: ID of the site
@@ -469,27 +464,23 @@ def register_site_tools(mcp: FastMCP):
             content: HTML or Markdown content of the news post
         """
         logger.info(f"Tool called: create_news_post for site {site_url}")
-        
+
         try:
             # Get authentication context from context object
             sp_ctx = ctx.request_context.lifespan_context
-            
+
             # Refresh token if needed
             await refresh_token_if_needed(sp_ctx)
-            
-            # Create Graph client and content generator
+
+            # Create Graph client
             graph_client = GraphClient(sp_ctx)
-            generator = ContentGenerator()
-            
-            # Generate news post configuration
-            news_config = generator.generate_news_post(title, description, content)
-            
-            # Create the news post
-            result = await graph_client.create_news_post(site_id, news_config)
-            
+
+            # Create the news post (GraphClient handles the configuration)
+            result = await graph_client.create_news_post(site_id, title, description, content)
+
             logger.info(f"Successfully created news post: {title}")
             return json.dumps(result, indent=2)
-            
+
         except Exception as e:
             logger.error(f"Error in create_news_post: {str(e)}")
             return f"Error creating news post: {str(e)}"
