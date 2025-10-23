@@ -61,7 +61,13 @@ def register_site_tools(mcp: FastMCP):
 
     @mcp.tool()
     async def create_sharepoint_site(ctx: Context, display_name: str, alias: str, description: str = "") -> str:
-        """Create a new SharePoint site."""
+        """Create a new SharePoint site by creating an Office 365 Group.
+
+        This tool creates an Office 365 Group, which automatically provisions a SharePoint team site.
+        The site will be accessible at: https://[tenant].sharepoint.com/sites/[alias]
+
+        Note: Requires Group.ReadWrite.All permission in Azure AD.
+        """
         logger.info(f"Tool called: create_sharepoint_site with name: {display_name}")
         try:
             sp_ctx = ctx.request_context.lifespan_context

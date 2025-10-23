@@ -75,36 +75,54 @@ class TestSharePointConnection:
     async def test_create_sharepoint_site(self):
         """Test creating a new SharePoint site.
 
-        NOTE: This test is skipped by default because creating sites is a major
-        operation that requires Sites.Manage.All permission and creates permanent
-        resources. To enable this test, set environment variable:
-        TEST_SITE_CREATION=true
+        NOTE: This test creates an Office 365 Group which automatically provisions
+        a SharePoint site. It requires Group.ReadWrite.All permission and creates
+        permanent resources that must be manually deleted.
+
+        To enable this test, set environment variable: TEST_SITE_CREATION=true
+
+        Required permissions:
+        - Group.ReadWrite.All (to create Office 365 Groups)
+        - Sites.Read.All (to read the created site info)
         """
         import os
         if not os.getenv("TEST_SITE_CREATION"):
-            pytest.skip("Site creation test disabled. Set TEST_SITE_CREATION=true to enable")
+            pytest.skip(
+                "Site creation test disabled. Requires Group.ReadWrite.All permission. "
+                "Set TEST_SITE_CREATION=true to enable"
+            )
 
         context = await get_auth_context()
         service = SharePointService(context)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         display_name = f"Test Site {timestamp}"
-        alias = f"test-site-{timestamp}"
+        alias = f"testsite{timestamp}"  # No hyphens in mail nickname
 
-        result = await service.create_sharepoint_site(
-            display_name,
-            alias,
-            "Test site created by integration tests"
-        )
+        try:
+            result = await service.create_sharepoint_site(
+                display_name,
+                alias,
+                "Test site created by integration tests"
+            )
 
-        assert result is not None
-        assert "id" in result or "webUrl" in result
+            assert result is not None
+            assert "id" in result
 
-        print(f"✓ Created SharePoint site: {display_name}")
-        print(f"  Alias: {alias}")
-        if "webUrl" in result:
-            print(f"  URL: {result['webUrl']}")
-        print(f"  NOTE: This site must be manually deleted from SharePoint admin center")
+            print(f"✓ Created Office 365 Group (with SharePoint site): {display_name}")
+            print(f"  Group ID: {result['id']}")
+            print(f"  Mail Nickname: {alias}")
+            if "sharePointSite" in result:
+                print(f"  SharePoint Site URL: {result['sharePointSite'].get('webUrl')}")
+            print(f"  NOTE: This group/site must be manually deleted from Microsoft 365 admin center")
+
+        except Exception as e:
+            if "Insufficient privileges" in str(e) or "Authorization_RequestDenied" in str(e):
+                pytest.skip(
+                    "Insufficient permissions. This test requires Group.ReadWrite.All permission. "
+                    "Add this permission to your Azure AD app registration."
+                )
+            raise
 
 
 class TestDocumentLibraries:

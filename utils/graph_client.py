@@ -90,21 +90,23 @@ class GraphClient:
         
         # Log response
         logger.debug(f"Response status code: {response.status_code}")
-        
-        if response.status_code not in (200, 201):
+
+        if response.status_code not in (200, 201, 204):
             error_text = response.text
             logger.error(f"Graph API error: {response.status_code} - {error_text}")
-            
+
             # Log detailed info for auth errors
             if response.status_code in (401, 403):
                 logger.error("Authentication or authorization error detected")
                 if "scp or roles claim" in error_text:
                     logger.error("Token does not have required claims (scp or roles)")
                     logger.error("Please check application permissions in Azure AD")
-            
+
             raise Exception(f"Graph API error: {response.status_code} - {error_text}")
-        
-        # Return successful response as JSON
+
+        # Return successful response as JSON (204 No Content has no body)
+        if response.status_code == 204:
+            return {}
         return response.json()
     
     async def patch(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -277,24 +279,49 @@ class GraphClient:
         return await self.post(endpoint, data)
 
     async def create_site(self, display_name: str, alias: str, description: str = "") -> Dict[str, Any]:
-        """Create a new SharePoint site.
+        """Create a new SharePoint site by creating an Office 365 Group.
+
+        Microsoft Graph API doesn't support creating SharePoint sites directly.
+        Instead, we create an Office 365 Group which automatically provisions
+        a SharePoint site.
 
         Args:
-            display_name: Display name of the site
-            alias: Site alias (used in URL)
-            description: Site description
+            display_name: Display name of the group/site
+            alias: Mail nickname for the group (used in URLs)
+            description: Site/group description
 
         Returns:
-            Created site information
+            Created group information (which includes the SharePoint site)
         """
-        endpoint = "sites/root/sites"
+        endpoint = "groups"
         data = {
             "displayName": display_name,
-            "alias": alias,
-            "description": description
+            "mailNickname": alias,
+            "description": description,
+            "mailEnabled": True,
+            "groupTypes": ["Unified"],  # Creates Office 365 Group
+            "securityEnabled": False,
+            "visibility": "Private"
         }
-        logger.info(f"Creating new site with name: {display_name}, alias: {alias}")
-        return await self.post(endpoint, data)
+        logger.info(f"Creating new Office 365 Group (with SharePoint site): {display_name}, alias: {alias}")
+        group = await self.post(endpoint, data)
+
+        # The SharePoint site is automatically created for the group
+        # We can get the site URL from the group
+        group_id = group.get("id")
+        if group_id:
+            # Add a delay to allow site provisioning
+            import asyncio
+            await asyncio.sleep(5)
+            # Get the site associated with this group
+            try:
+                site_endpoint = f"groups/{group_id}/sites/root"
+                site_info = await self.get(site_endpoint)
+                group["sharePointSite"] = site_info
+            except Exception as e:
+                logger.warning(f"Could not fetch SharePoint site info yet: {e}")
+
+        return group
 
     async def create_list(self, site_id: str, display_name: str, 
                         template: str = "genericList", description: str = "") -> Dict[str, Any]:
@@ -519,6 +546,7 @@ class GraphClient:
             logger.warning(f"Failed to promote page as news post: {e}")
         
         return {
+            "id": page_id,
             "page_info": published_page,
             "title": title,
             "description": description,
@@ -613,17 +641,19 @@ class GraphClient:
     
     async def publish_page(self, site_id: str, page_id: str) -> Dict[str, Any]:
         """Publish a SharePoint page.
-        
+
         Args:
             site_id: ID of the site
             page_id: ID of the page
-        
+
         Returns:
-            Published page information
+            Published page information (API returns 204 No Content on success)
         """
-        endpoint = f"sites/{site_id}/pages/{page_id}/publish"
+        endpoint = f"sites/{site_id}/pages/{page_id}/microsoft.graph.sitePage/publish"
         logger.info(f"Publishing page {page_id}")
-        return await self.post(endpoint, {})
+        await self.post(endpoint, {})
+        # Publish returns 204 No Content (empty response), so we return success status
+        return {"status": "published", "id": page_id}
     
     async def get_document_content(self, site_id: str, drive_id: str, item_id: str) -> bytes:
         """Get content of a document.
