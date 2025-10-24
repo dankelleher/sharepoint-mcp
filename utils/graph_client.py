@@ -307,6 +307,15 @@ class GraphClient:
         Returns:
             Created group information (which includes the SharePoint site)
         """
+        # Get current user to set as owner
+        try:
+            me = await self.get("me")
+            user_id = me.get("id")
+            logger.info(f"Setting current user {user_id} as group owner")
+        except Exception as e:
+            logger.warning(f"Could not get current user, creating group without owner: {e}")
+            user_id = None
+
         endpoint = "groups"
         data = {
             "displayName": display_name,
@@ -317,6 +326,17 @@ class GraphClient:
             "securityEnabled": False,
             "visibility": "Private"
         }
+
+        # Add owner if we have user ID (critical for proper SharePoint site provisioning)
+        if user_id:
+            data["owners@odata.bind"] = [
+                f"https://graph.microsoft.com/v1.0/users/{user_id}"
+            ]
+            # Also add as member
+            data["members@odata.bind"] = [
+                f"https://graph.microsoft.com/v1.0/users/{user_id}"
+            ]
+
         logger.info(f"Creating new Office 365 Group (with SharePoint site): {display_name}, alias: {alias}")
         group = await self.post(endpoint, data)
 

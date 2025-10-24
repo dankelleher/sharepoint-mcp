@@ -21,6 +21,9 @@ def register_site_tools(mcp: FastMCP):
     async def list_sites(ctx: Context, search_query: str = "*") -> str:
         """List all SharePoint sites accessible to the current user.
 
+        This tool uses SharePoint search to find sites. Note that newly created sites
+        may take 15+ minutes to appear in search results due to indexing delays.
+
         Args:
             search_query: Optional search query to filter sites. Use "*" for all sites.
                          Examples: "*", "project*", "team"
@@ -87,6 +90,10 @@ def register_site_tools(mcp: FastMCP):
 
         This tool creates an Office 365 Group, which automatically provisions a SharePoint team site.
         The site will be accessible at: https://[tenant].sharepoint.com/sites/[alias]
+
+        IMPORTANT: While the site is created and accessible within seconds, it takes 15+ minutes
+        for new sites to appear in search results (used by list_sites). The site can be accessed
+        directly via its URL immediately after creation.
 
         Note: Requires Group.ReadWrite.All permission in Azure AD.
         """
